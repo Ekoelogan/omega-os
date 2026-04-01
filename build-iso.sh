@@ -203,6 +203,94 @@ if [ -d "$SCRIPT_DIR/desktop" ]; then
     echo -e "${GREEN}[✓] Desktop theme installed${NC}"
 fi
 
+# ── GRUB theme ───────────────────────────────────────────────────────────────
+mkdir -p config/includes.binary/boot/grub/themes/omega
+cat > config/includes.binary/boot/grub/themes/omega/theme.txt <<'GRUBTHEME'
+# OMEGA-OS GRUB Theme
+title-text: ""
+desktop-color: "#0d1117"
+desktop-image: ""
+
++ boot_menu {
+    left = 25%
+    top = 30%
+    width = 50%
+    height = 40%
+    item_font = "Monospace Regular 14"
+    item_color = "#c9d1d9"
+    selected_item_font = "Monospace Bold 14"
+    selected_item_color = "#ff2d78"
+    item_height = 28
+    item_padding = 8
+    item_spacing = 4
+    selected_item_pixmap_style = "select_*.png"
+}
+
++ label {
+    left = 25%
+    top = 15%
+    width = 50%
+    align = "center"
+    color = "#ff2d78"
+    font = "Monospace Bold 24"
+    text = "OMEGA-OS v2.0"
+}
+
++ label {
+    left = 25%
+    top = 22%
+    width = 50%
+    align = "center"
+    color = "#484f58"
+    font = "Monospace Regular 12"
+    text = "AI-Powered OSINT & Security Toolkit"
+}
+
++ label {
+    left = 25%
+    top = 80%
+    width = 50%
+    align = "center"
+    color = "#484f58"
+    font = "Monospace Regular 10"
+    text = "Select boot mode and press Enter"
+}
+GRUBTHEME
+
+# GRUB configuration with menu entries
+mkdir -p config/includes.binary/boot/grub
+cat > config/includes.binary/boot/grub/grub.cfg <<'GRUBCFG'
+set default=0
+set timeout=5
+set gfxmode=1024x768,auto
+set theme=/boot/grub/themes/omega/theme.txt
+
+insmod gfxterm
+terminal_output gfxterm
+
+menuentry "OMEGA-OS v2.0 Live" {
+    linux /live/vmlinuz boot=live components quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "OMEGA-OS v2.0 Live (Persistent)" {
+    linux /live/vmlinuz boot=live components persistence quiet splash
+    initrd /live/initrd.img
+}
+
+menuentry "OMEGA-OS v2.0 (Safe Mode)" {
+    linux /live/vmlinuz boot=live components nomodeset
+    initrd /live/initrd.img
+}
+
+menuentry "OMEGA-OS v2.0 (RAM Only — Forensics)" {
+    linux /live/vmlinuz boot=live components toram quiet splash
+    initrd /live/initrd.img
+}
+GRUBCFG
+
+echo -e "${GREEN}[✓] GRUB theme configured${NC}"
+
 # ── User bashrc ──────────────────────────────────────────────────────────────
 mkdir -p config/includes.chroot/home/omega
 cat > config/includes.chroot/home/omega/.bashrc <<'RCEOF'
@@ -212,7 +300,7 @@ export PS1='\[\033[38;2;255;45;120m\][omega-os]\[\033[0m\] \w \$ '
 # Show banner on login
 omega 2>/dev/null || true
 echo -e "\033[38;2;255;45;120mOMEGA-OS v2.0\033[0m — AI-Powered OSINT & Security Toolkit"
-echo -e "\033[0;37mRun: omega --help  |  omega autopilot <target>  |  omega agents\033[0m"
+echo -e "\033[0;37mRun: omega --help  |  omega chat  |  omega autopilot <target>  |  omega agents\033[0m"
 echo ""
 
 alias ll='ls -lah --color=auto'
