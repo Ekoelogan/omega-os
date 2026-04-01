@@ -1,33 +1,50 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-#  build-iso.sh — build omega-live.iso using live-build (Debian-based)
+#  build-iso.sh — OMEGA-OS v2.0 Live ISO builder using live-build
 #
-#  Produces a bootable ISO (~800MB) with:
-#    - Debian 12 (Bookworm) base
-#    - Python 3.11 + pipx
-#    - omega-cli v0.3.0 pre-installed
+#  Produces a bootable ISO with:
+#    - Debian 12 (Bookworm) base + Kali tools
+#    - Python 3.11+ / pipx / omega-cli v1.8.0 + AI agents
+#    - omega-mcp-server for AI assistant integration
+#    - Ollama for local LLM inference
+#    - MATE desktop with pink OMEGA theme
 #    - GRUB (UEFI + BIOS), persistent storage support
 #    - Auto-login to 'omega' user
-#    - MOTD with omega banner
 #
-#  Run as root on a Debian/Ubuntu host:
+#  Run as root on a Debian/Ubuntu host (needs ~8GB disk):
 #    sudo bash build-iso.sh
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="/tmp/omega-live-build"
-OUTPUT_ISO="$SCRIPT_DIR/omega-live.iso"
-OMEGA_SRC="$SCRIPT_DIR/omega-cli-bundle/omega-cli"
+OUTPUT_ISO="$SCRIPT_DIR/omega-os-v2.iso"
+OMEGA_CLI_SRC="$SCRIPT_DIR/../omega-cli"
+OMEGA_MCP_SRC="$SCRIPT_DIR/../omega-mcp-server"
 
+PINK='\033[38;2;255;45;120m'
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 
-echo -e "${CYAN}[*] Building omega-live ISO...${NC}"
-echo -e "${CYAN}[*] Build dir: $BUILD_DIR${NC}"
+echo -e "${PINK}"
+echo " ██████╗ ███╗   ███╗███████╗ ██████╗  █████╗       ██████╗ ███████╗"
+echo "██╔═══██╗████╗ ████║██╔════╝██╔════╝ ██╔══██╗     ██╔═══██╗██╔════╝"
+echo "██║   ██║██╔████╔██║█████╗  ██║  ███╗███████║     ██║   ██║███████╗"
+echo "██║   ██║██║╚██╔╝██║██╔══╝  ██║   ██║██╔══██║     ██║   ██║╚════██║"
+echo "╚██████╔╝██║ ╚═╝ ██║███████╗╚██████╔╝██║  ██║     ╚██████╔╝███████║"
+echo " ╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝      ╚═════╝╚══════╝"
+echo -e "${NC}"
+echo "  OMEGA-OS v2.0 — ISO Builder"
+echo ""
 
-# ── Install live-build ───────────────────────────────────────────────────────
+# ── Preflight checks ────────────────────────────────────────────────────────
+if [ "$(id -u)" -ne 0 ]; then
+    echo -e "${RED}[!] Must run as root: sudo bash build-iso.sh${NC}"
+    exit 1
+fi
+
 if ! command -v lb &>/dev/null; then
-    apt-get install -y live-build debootstrap squashfs-tools
+    echo -e "${CYAN}[*] Installing live-build...${NC}"
+    apt-get update -qq && apt-get install -y live-build debootstrap squashfs-tools xorriso
 fi
 
 # ── Setup build dir ──────────────────────────────────────────────────────────
@@ -36,6 +53,7 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 # ── Configure live-build ─────────────────────────────────────────────────────
+echo -e "${CYAN}[*] Configuring live-build...${NC}"
 lb config \
     --distribution bookworm \
     --architectures amd64 \
@@ -47,145 +65,170 @@ lb config \
     --memtest none \
     --win32-loader false \
     --username omega \
-    --hostname omega-live \
-    --image-name omega-live
+    --hostname omega-os \
+    --image-name omega-os-v2
 
 # ── Package list ─────────────────────────────────────────────────────────────
 mkdir -p config/package-lists
 cat > config/package-lists/omega.list.chroot <<'PKGEOF'
 # Core system
-bash
-curl
-wget
-git
-vim
-nano
-htop
-net-tools
-iputils-ping
-dnsutils
-whois
-nmap
-netcat-openbsd
-tcpdump
-traceroute
+bash curl wget git vim nano htop net-tools iputils-ping
+# Network & scanning
+dnsutils whois nmap netcat-openbsd tcpdump traceroute
 # Python
-python3
-python3-pip
-python3-venv
-pipx
-# SSL/TLS tools
-openssl
-ca-certificates
-# Terminal tools
-tmux
-screen
-less
-file
-unzip
+python3 python3-pip python3-venv python3-dev pipx
+# Build tools
+build-essential libffi-dev libssl-dev
+# SSL/TLS
+openssl ca-certificates sslyze
+# Terminal
+tmux screen less file unzip jq tree
 # Network
-openssh-client
-tor
-proxychains4
+openssh-client tor proxychains4
+# Desktop (MATE)
+mate-desktop-environment-core mate-terminal mate-themes
+lightdm lightdm-gtk-greeter plymouth plymouth-themes
+# Security tools
+nikto dirb gobuster sqlmap hydra john
+exiftool foremost binwalk steghide
 PKGEOF
 
-# ── Hooks: install omega-cli ─────────────────────────────────────────────────
+# ── Hooks: install omega-cli + Ollama ────────────────────────────────────────
 mkdir -p config/hooks/live
-
 cat > config/hooks/live/0100-omega-install.hook.chroot <<'HOOKEOF'
 #!/bin/bash
 set -e
-export HOME=/root
-export PATH="$PATH:/root/.local/bin"
 
-# Create omega user with sudo
-useradd -m -s /bin/bash omega || true
+# Create omega user
+useradd -m -s /bin/bash -G sudo omega || true
 echo "omega:omega" | chpasswd
-usermod -aG sudo omega
 
-# Auto-login setup
+# Auto-login (TTY)
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin omega --noclear %I $TERM
+ExecStart=-/sbin/agetty --autologin omega --noclear %I \$TERM
 EOF
 
-# Install pipx for omega user
-sudo -u omega bash -c '
-    export HOME=/home/omega
-    python3 -m pip install --user pipx 2>/dev/null || true
-    python3 -m pipx ensurepath 2>/dev/null || true
-'
+# Auto-login (LightDM)
+mkdir -p /etc/lightdm
+cat > /etc/lightdm/lightdm.conf <<EOF
+[Seat:*]
+autologin-user=omega
+autologin-user-timeout=0
+user-session=mate
+EOF
 
-echo "omega-cli install pending — will complete on first boot"
-HOOKEOF
+# Install omega-cli + MCP server
+cd /opt/omega-cli && python3 -m venv /opt/omega-venv
+/opt/omega-venv/bin/pip install --no-cache-dir -U pip
+/opt/omega-venv/bin/pip install --no-cache-dir /opt/omega-cli/
+/opt/omega-venv/bin/pip install --no-cache-dir /opt/omega-mcp-server/
+ln -sf /opt/omega-venv/bin/omega /usr/local/bin/omega
+ln -sf /opt/omega-venv/bin/omega-mcp /usr/local/bin/omega-mcp
 
-chmod +x config/hooks/live/0100-omega-install.hook.chroot
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh || true
 
-# ── Copy omega-cli source into chroot ────────────────────────────────────────
-mkdir -p config/includes.chroot/opt/omega-cli
-if [ -d "$OMEGA_SRC" ]; then
-    cp -r "$OMEGA_SRC/." config/includes.chroot/opt/omega-cli/
-else
-    echo -e "${YELLOW}[!] omega-cli source not found at $OMEGA_SRC — will download from current host${NC}"
-    cp -r /home/*/.local/share/pipx/venvs/omega-cli 2>/dev/null \
-        config/includes.chroot/opt/omega-cli/ || true
-fi
-
-# ── First-boot service: install omega-cli ────────────────────────────────────
-mkdir -p config/includes.chroot/etc/systemd/system
-cat > config/includes.chroot/etc/systemd/system/omega-firstboot.service <<'SVCEOF'
+# Ollama systemd service
+cat > /etc/systemd/system/ollama.service <<EOF
 [Unit]
-Description=omega-cli first-boot installer
+Description=Ollama AI Server
 After=network-online.target
-Wants=network-online.target
-ConditionPathExists=!/var/lib/omega-installed
 
 [Service]
-Type=oneshot
-User=omega
-Environment=HOME=/home/omega
-ExecStart=/bin/bash -c 'cd /opt/omega-cli && python3 -m pip install --user pipx && python3 -m pipx install /opt/omega-cli && touch /var/lib/omega-installed'
-RemainAfterExit=yes
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+Environment=OLLAMA_HOST=0.0.0.0:11434
 
 [Install]
 WantedBy=multi-user.target
-SVCEOF
+EOF
+systemctl enable ollama.service || true
 
-mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
-ln -sf /etc/systemd/system/omega-firstboot.service \
-    config/includes.chroot/etc/systemd/system/multi-user.target.wants/omega-firstboot.service
+# MCP server systemd service
+cat > /etc/systemd/system/omega-mcp.service <<EOF
+[Unit]
+Description=OMEGA MCP Server
+After=network-online.target
 
-# ── MOTD / bashrc ────────────────────────────────────────────────────────────
-mkdir -p config/includes.chroot/home/omega
-cat > config/includes.chroot/home/omega/.bashrc <<'RCEOF'
-export PATH="$PATH:/home/omega/.local/bin"
-export PS1='\[\033[1;35m\][omega]\[\033[0m\] \w \$ '
+[Service]
+ExecStart=/usr/local/bin/omega-mcp --transport sse
+Restart=always
+User=omega
 
-# Show banner on login
-if [ -f /home/omega/.local/bin/omega ]; then
-    omega banner 2>/dev/null || true
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable omega-mcp.service || true
+HOOKEOF
+chmod +x config/hooks/live/0100-omega-install.hook.chroot
+
+# ── Copy sources into chroot ─────────────────────────────────────────────────
+mkdir -p config/includes.chroot/opt/omega-cli
+mkdir -p config/includes.chroot/opt/omega-mcp-server
+
+if [ -d "$OMEGA_CLI_SRC" ]; then
+    cp -r "$OMEGA_CLI_SRC/." config/includes.chroot/opt/omega-cli/
+    echo -e "${GREEN}[✓] omega-cli source copied${NC}"
+fi
+if [ -d "$OMEGA_MCP_SRC" ]; then
+    cp -r "$OMEGA_MCP_SRC/." config/includes.chroot/opt/omega-mcp-server/
+    echo -e "${GREEN}[✓] omega-mcp-server source copied${NC}"
 fi
 
-echo -e "\033[1;36momega-cli v0.3.0 — OSINT Toolkit\033[0m"
-echo -e "\033[0;37mRun: omega scan <target>  |  omega --help\033[0m\n"
+# ── Desktop theme ────────────────────────────────────────────────────────────
+if [ -d "$SCRIPT_DIR/desktop" ]; then
+    # GSchema override for MATE theme
+    mkdir -p config/includes.chroot/usr/share/glib-2.0/schemas
+    cp "$SCRIPT_DIR/desktop/omega-desktop.gschema.override" \
+       config/includes.chroot/usr/share/glib-2.0/schemas/ 2>/dev/null || true
+
+    # Wallpaper
+    mkdir -p config/includes.chroot/usr/share/backgrounds
+    cp "$SCRIPT_DIR/desktop/omega-wallpaper.svg" \
+       config/includes.chroot/usr/share/backgrounds/ 2>/dev/null || true
+
+    # Plymouth splash
+    mkdir -p config/includes.chroot/usr/share/plymouth/themes/omega
+    cp "$SCRIPT_DIR/desktop/omega-plymouth.script" \
+       config/includes.chroot/usr/share/plymouth/themes/omega/ 2>/dev/null || true
+
+    # Autostart
+    mkdir -p config/includes.chroot/etc/xdg/autostart
+    cp "$SCRIPT_DIR/desktop/omega.desktop" \
+       config/includes.chroot/etc/xdg/autostart/ 2>/dev/null || true
+
+    echo -e "${GREEN}[✓] Desktop theme installed${NC}"
+fi
+
+# ── User bashrc ──────────────────────────────────────────────────────────────
+mkdir -p config/includes.chroot/home/omega
+cat > config/includes.chroot/home/omega/.bashrc <<'RCEOF'
+export PATH="/opt/omega-venv/bin:$PATH:/home/omega/.local/bin"
+export PS1='\[\033[38;2;255;45;120m\][omega-os]\[\033[0m\] \w \$ '
+
+# Show banner on login
+omega 2>/dev/null || true
+echo -e "\033[38;2;255;45;120mOMEGA-OS v2.0\033[0m — AI-Powered OSINT & Security Toolkit"
+echo -e "\033[0;37mRun: omega --help  |  omega autopilot <target>  |  omega agents\033[0m"
+echo ""
 
 alias ll='ls -lah --color=auto'
 alias cls='clear'
 RCEOF
 
-# ── Build ─────────────────────────────────────────────────────────────────────
-echo -e "${CYAN}[*] Running lb build (this takes 10-20 minutes)...${NC}"
+# ── Build ────────────────────────────────────────────────────────────────────
+echo -e "\n${CYAN}[*] Running lb build (this takes 15-30 minutes)...${NC}"
 lb build 2>&1 | tee /tmp/omega-lb-build.log
 
-# Find and copy the ISO
 BUILT_ISO=$(find "$BUILD_DIR" -name "*.iso" | head -1)
 if [ -f "$BUILT_ISO" ]; then
     cp "$BUILT_ISO" "$OUTPUT_ISO"
     ISO_SIZE=$(du -sh "$OUTPUT_ISO" | cut -f1)
     echo -e "\n${GREEN}[✓] ISO built: $OUTPUT_ISO ($ISO_SIZE)${NC}"
-    echo -e "${GREEN}[✓] Run: sudo bash make-bootable.sh /dev/sdX${NC}"
+    echo -e "${GREEN}[✓] Flash: sudo bash make-bootable.sh /dev/sdX${NC}"
 else
     echo -e "${RED}[!] Build failed. Check /tmp/omega-lb-build.log${NC}"
     exit 1
