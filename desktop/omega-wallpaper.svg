@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#161b22" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="#0d1117"/>
+
+  <!-- Grid pattern overlay -->
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+
+  <!-- OMEGA logo text -->
+  <text x="960" y="520" text-anchor="middle" dominant-baseline="middle"
+        font-family="monospace" font-size="120" font-weight="bold" fill="#ff2d78">
+    OMEGA
+  </text>
+
+  <!-- Subtitle -->
+  <text x="960" y="600" text-anchor="middle" dominant-baseline="middle"
+        font-family="monospace" font-size="24" fill="#484f58">
+    Offensive Modular Exploitation &amp; Gathering Architecture
+  </text>
+</svg>

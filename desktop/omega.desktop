@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OMEGA Banner
+Comment=Display OMEGA-OS banner on login
+Exec=omega
+Terminal=true
+Icon=utilities-terminal
+Categories=System;
+X-MATE-Autostart-enabled=true
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

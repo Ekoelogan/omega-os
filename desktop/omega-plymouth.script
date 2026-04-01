@@ -1,0 +1,92 @@
+# OMEGA-OS Plymouth Boot Splash Script
+# Shows the OMEGA banner in pink during boot
+
+Window.SetBackgroundTopColor(0.05, 0.07, 0.09);    # #0d1117
+Window.SetBackgroundBottomColor(0.05, 0.07, 0.09);
+
+# Banner lines
+banner_text[0] = "  ██████╗ ███╗   ███╗███████╗ ██████╗  █████╗ ";
+banner_text[1] = " ██╔═══██╗████╗ ████║██╔════╝██╔════╝ ██╔══██╗";
+banner_text[2] = " ██║   ██║██╔████╔██║█████╗  ██║  ███╗███████║";
+banner_text[3] = " ██║   ██║██║╚██╔╝██║██╔══╝  ██║   ██║██╔══██║";
+banner_text[4] = " ╚██████╔╝██║ ╚═╝ ██║███████╗╚██████╔╝██║  ██║";
+banner_text[5] = "  ╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝";
+
+num_lines = 6;
+line_height = 24;
+
+# Create sprites for each banner line
+for (i = 0; i < num_lines; i++) {
+    banner_image[i] = Image.Text(banner_text[i], 1.0, 0.176, 0.471);  # #ff2d78
+    banner_sprite[i] = Sprite(banner_image[i]);
+
+    x = Window.GetWidth() / 2 - banner_image[i].GetWidth() / 2;
+    y = Window.GetHeight() / 2 - (num_lines * line_height) / 2 + i * line_height;
+
+    banner_sprite[i].SetX(x);
+    banner_sprite[i].SetY(y);
+    banner_sprite[i].SetZ(100);
+}
+
+# Progress bar
+progress_box_image = Image.Text("", 0.3, 0.3, 0.3);
+progress_bar_sprite = Sprite();
+
+fun refresh_callback() {
+    # Animate: no-op keeps sprites visible
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Progress callback — draw a simple bar below the banner
+fun progress_callback(duration, progress) {
+    bar_width = Window.GetWidth() * 0.4;
+    bar_height = 4;
+
+    bar_x = Window.GetWidth() / 2 - bar_width / 2;
+    bar_y = Window.GetHeight() / 2 + (num_lines * line_height) / 2 + 40;
+
+    fill_width = Math.Int(bar_width * progress);
+
+    progress_image = Image(fill_width, bar_height);
+    progress_image = Image.Text(String(Math.Int(progress * 100)) + "%", 1.0, 0.176, 0.471);
+
+    progress_bar_sprite.SetImage(progress_image);
+    progress_bar_sprite.SetX(bar_x);
+    progress_bar_sprite.SetY(bar_y);
+    progress_bar_sprite.SetZ(100);
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# Password prompt
+fun password_callback(prompt, bullets) {
+    label = Image.Text(prompt, 1.0, 0.176, 0.471);
+    label_sprite = Sprite(label);
+    label_sprite.SetX(Window.GetWidth() / 2 - label.GetWidth() / 2);
+    label_sprite.SetY(Window.GetHeight() / 2 + 120);
+    label_sprite.SetZ(100);
+
+    bullet_string = "";
+    for (i = 0; i < bullets; i++)
+        bullet_string += "●";
+
+    bullet_image = Image.Text(bullet_string, 1.0, 0.176, 0.471);
+    bullet_sprite = Sprite(bullet_image);
+    bullet_sprite.SetX(Window.GetWidth() / 2 - bullet_image.GetWidth() / 2);
+    bullet_sprite.SetY(Window.GetHeight() / 2 + 150);
+    bullet_sprite.SetZ(100);
+}
+
+Plymouth.SetDisplayPasswordFunction(password_callback);
+
+# Message display
+fun message_callback(text) {
+    msg_image = Image.Text(text, 0.788, 0.820, 0.851);  # #c9d1d9
+    msg_sprite = Sprite(msg_image);
+    msg_sprite.SetX(Window.GetWidth() / 2 - msg_image.GetWidth() / 2);
+    msg_sprite.SetY(Window.GetHeight() - 50);
+    msg_sprite.SetZ(100);
+}
+
+Plymouth.SetMessageFunction(message_callback);
